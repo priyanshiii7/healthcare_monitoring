@@ -57,28 +57,6 @@ Threading
 FastAPI, RESTful
 Matplotlib/Plotly
 
-=> Project Structure
-healthcare_monitoring/
-│
-├── data/
-│   └── health_data.db          # SQLite database (auto-generated)
-│
-├── src/
-│   ├── __init__.py
-│   ├── database.py             # Database operations (CRUD)
-│   ├── data_generator.py       # IoT simulation engine
-│   ├── analyzer.py             # Anomaly detection logic
-│   └── alert_system.py         # Alert generation
-│
-├── tests/
-│   ├── test_database.py        # Database unit tests
-│   └── test_generator.py       # Generator tests
-│
-├── config.py                   # Configuration settings
-├── main.py                     # Application entry point
-├── requirements.txt            # Python dependencies
-└── README.md                   # This file
-
 
 => Installation
 Prerequisites
