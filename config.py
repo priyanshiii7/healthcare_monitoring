@@ -12,3 +12,6 @@ NUM_PATIENTS = 3
 ALERT_CHECK_INTERVAL = 10 #sec
 CONSECUTIVE_HIGH_READINGS = 3 #3 high reading before alert
 
+SECRET_KEY = "change-this-to-a-random-string-in-production"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours

@@ -44,8 +44,8 @@ def initialize_database():
 
     conn.commit()  #This saves chngs
     conn.close()
-
-    print("My first database initialization complete! (11-01-2026)")
+    create_alerts_table()
+    create_doctors_table()
 
 
 #STEP 4: insert data
@@ -145,6 +145,235 @@ def get_recent_reading(patient_id, limit=10):
     conn.close()
     return readings
 
+def create_alerts_table():
+    """
+    Creates the alerts table if it doesn't exist.
+    Call this inside initialize_database().
+    """
 
+    conn = get_connection()
+    cursor = conn.cursor()
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            message TEXT NOT NULL,
+            glucose_level REAL,
+            timestamp TEXT NOT NULL,
+            is_resolved INTEGER DEFAULT 0,
+            FOREIGN KEY (patient_id) REFERENCES patients(patient_id)
+        )
+    """)
 
+    conn.commit()
+    conn.close()
+
+def save_alert(patient_id, status, message, glucose_level):
+    """
+    Saves an alert to the database.
+    
+    is_resolved = 0 means the doctor hasn't acknowledged it yet.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    timestamp = datetime.now().isoformat()
+    cursor.execute("""
+        INSERT INTO alerts (patient_id, status, message, glucose_level, timestamp, is_resolved)
+        VALUES (?, ?, ?, ?, ?, 0)
+    """, (patient_id, status, message, glucose_level, timestamp))
+
+    conn.commit()
+    conn.close()
+
+def get_unresolved_alerts():
+    """
+    Gets all alerts that haven't been acknowledged by a doctor yet.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM alerts
+        WHERE is_resolved = 0
+        ORDER BY timestamp DESC
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    alerts = []
+    for row in rows:
+        alerts.append({
+            'id': row['id'],
+            'patient_id': row['patient_id'],
+            'status': row['status'],
+            'message': row['message'],
+            'glucose_level': row['glucose_level'],
+            'timestamp': row['timestamp']
+        })
+
+    return alerts
+
+def get_all_patients():
+    """Gets all patients from the database."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM patients")
+    rows = cursor.fetchall()
+    conn.close()
+
+    patients = []
+    for row in rows:
+        patients.append({
+            'patient_id': row['patient_id'],
+            'name': row['name'],
+            'age': row['age'],
+            'condition': row['condition'],
+            'threshold_high': row['threshold_high'],
+            'threshold_low': row['threshold_low']
+        })
+
+    return patients
+
+def get_patient(patient_id):
+    """Gets a single patient by ID. Returns None if not found."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+                   SELECT * FROM patients
+                   WHERE patient_id = ?
+                   """, (patient_id,))
+    
+    row = cursor.fetchone()
+    conn.close()
+
+    if row:
+        return {
+            'patient_id': row['patient_id'],
+            'name': row['name'],
+            'age': row['age'],
+            'condition': row['condition'],
+            'threshold_high': row['threshold_high'],
+            'threshold_low': row['threshold_low']
+        }
+    
+    return None
+
+def get_recent_readings(patient_id, limit = 10):
+    """Gets recent readings - note: plural name to match main.py import."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+                   SELECT glucose_level, timestamp
+                   FROM readings
+                   WHERE patient_id = ?
+                   ORDER BY timestamp DESC
+                   LIMIT ?
+                   """, (patient_id, limit))
+    
+    rows = cursor.fetchall()
+    conn .close()
+
+    readings = []
+    for row in rows:
+        readings.append({
+            'glucose_level': row['glucose_level'],
+            'timestamp': row['timestamp']
+        })
+
+    return readings
+
+def create_doctors_table():
+    """Creates the doctors/users table."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+                   CREATE TABLE IF NOT EXISTS doctors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            full_name TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            specialty TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def create_doctor(username: str, full_name: str,password_hash: str, specialty: str = "General"):
+    """Saves a new doctor to the database."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            INSERT INTO doctors (username, full_name, password_hash, specialty)
+            VALUES (?, ?, ?, ?)
+        """, (username, full_name, password_hash, specialty))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def get_doctor_by_username(username:str):
+    """Finds a doctor by username. Used during login."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM doctors WHERE username = ?
+    """, (username,))
+
+    row = cursor.fetchone()
+    conn.close()
+
+    if row:
+        return {
+            'id': row['id'],
+            'username': row['username'],
+            'full_name': row['full_name'],
+            'password_hash': row['password_hash'],
+            'specialty': row['specialty']
+        }
+    return None
+
+def assign_patient_to_doctor(patient_id: str, doctor_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE patients SET doctor_id = ? WHERE patient_id = ?
+    """, (doctor_id, patient_id))
+    conn.commit()
+    conn.close()
+
+def get_patients_by_doctor(doctor_id: int):
+    """Returns only the patients assigned to this doctor."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM patients WHERE doctor_id = ?
+    """, (doctor_id,))
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    patients = []
+    for row in rows:
+        patients.append({
+            'patient_id': row['patient_id'],
+            'name': row['name'],
+            'age': row['age'],
+            'condition': row['condition'],
+            'threshold_high': row['threshold_high'],
+            'threshold_low': row['threshold_low']
+        })
+    return patients

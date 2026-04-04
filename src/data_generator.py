@@ -1,7 +1,7 @@
 import random #to add randomness as glucose level fluctuate throughout the day
 import time #to add delay bw readings
 from datetime import datetime
-from database import add_reading
+from src.database import add_reading
 import threading
 
 #import settings
@@ -22,21 +22,23 @@ def generate_glucose_reading(patient_id, is_diabetic=True):
         float: Glucose level in mg/dL
 
     """
-
+    #Step 1
     #base glucose level
     if is_diabetic:
-        base_level = random.uniform(90, 160) #diabetics have less stable glucose
+        base_level = random.uniform(90, 160) #diabetics have less stable glucose also this generates a random no bw 90-160
     else:
         base_level = random.uniform(80, 120) #non stay in tighter range
 
+    #Step 2: daily variation
     variation = random.uniform(-20, 20)
     glucose_level = base_level + variation
 
-    if random.random() < 0.1:
+    #Step 3 random spikes (10% chance)
+    if random.random() < 0.1: #10% of time
         # Returns: 0.0 to 1.0
         # If result is 0.05 → 0.05 < 0.1 → True (spike!)
         # If result is 0.87 → 0.87 < 0.1 → False (no spike)
-        glucose_level += random.uniform(30, 60)
+        glucose_level += random.uniform(30, 60) 
 
     glucose_level = round(glucose_level, 1) #round to 1 decimal 
     return glucose_level
@@ -83,4 +85,15 @@ def simulate_all_patients(patient_ids, duration_minutes= 60):
     threads = []
 
     #create a thread for each patient
+    for patient_id in patient_ids:
+        thread = threading.Thread(
+            target=simulate_patient_readings,
+            args=(patient_id, duration_minutes)    
+            )
+        threads.append(thread)
+        thread.start() #begins execution
+
+    for thread in threads:
+        thread.join() 
     
+    print("All simulations done")
