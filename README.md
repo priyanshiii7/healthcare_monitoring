@@ -1,287 +1,265 @@
-## Healthcare Patient Monitoring System
+# 🏥 Healthcare Patient Monitoring System
 
-Real-time IoT glucose monitoring simulation with anomaly detection and predictive analytics.
+> Real-time IoT glucose monitoring simulation with a multi-threaded data pipeline, anomaly detection, and predictive analytics.
 
-=> Table of Contents
+[![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-planned-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Active%20Development-orange?style=flat-square)]()
 
-Overview
-Features
-Tech Stack
-Project Structure
-Installation
-Usage
-How It Works
-Current Progress
-Roadmap
-Learning Journey
+---
 
+## What It Does
 
-=> Overview
-A healthcare monitoring system that simulates real-time glucose data from IoT devices, analyzes patient health patterns, and generates automated alerts for anomalies. Built as a learning project to understand:
+This system simulates a real-time patient health monitoring pipeline — the kind that powers IoT devices in clinical settings. It ingests glucose readings every 5 seconds from multiple concurrent patient streams, persists them in a normalised relational database, and runs anomaly detection to flag dangerous readings automatically.
 
-Real-time data processing
-Database design and optimization
-Multi-threaded programming
-Time-series analysis
-Healthcare data patterns
+Built with a production-aware architecture from day one: proper DB normalisation, thread-safe concurrent access, SQL injection prevention, and a layered design that separates data generation, storage, and analytics cleanly.
 
-Inspiration: Based on Google Cloud's patient monitoring blueprint, adapted for local development and learning.
+---
 
-=> Features
+## Architecture
 
-Implemented
-Real-time Data Generation: Simulates glucose readings from IoT devices every 5 seconds
-Multi-Patient Support: Concurrent data streams for multiple patients using threading
-Persistent Storage: Normalized SQLite database with relational schema
-Realistic Patterns: Glucose variations mimicking real-world diabetic/non-diabetic patterns
-Data Integrity: SQL injection prevention, foreign key constraints, error handling
+```
+┌──────────────────────┐
+│   IoT Data Generator  │  ← Simulates glucose sensors (every 5s per patient)
+│  (Multi-threaded)     │    Realistic diabetic / non-diabetic patterns
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│   SQLite Database     │  ← Normalised schema (3NF), FK constraints,
+│   (Thread-safe)       │    connection pooling, SQL injection prevention
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│   Anomaly Analyzer    │  ← Detects consecutive high readings,
+│   (In Progress)       │    7-day moving averages, peak risk windows
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│   Alert System        │  ← Rule-based critical alerts (Planned)
+│   + FastAPI Layer     │    REST endpoints, WebSocket real-time updates
+└──────────────────────┘
+```
 
-In Progress
-Anomaly Detection Engine: Pattern recognition for consecutive high readings
-Alert System: Automated notifications for critical glucose levels
-Time-Series Analysis: Pandas-based trend analysis and 7-day moving averages
-Data Visualization: Graphs showing glucose trends and peak risk windows
+---
 
-Planned
-RESTful API: FastAPI endpoints for data access
-Web Dashboard: Real-time monitoring interface
-Predictive Analytics: ML model for glucose forecasting
-Cloud Integration: Google Cloud Pub/Sub and BigQuery implementation
+## Features
 
+### ✅ Implemented
+- **Real-time data generation** — glucose readings every 5 seconds per patient
+- **Multi-patient concurrency** — independent threads per patient stream, thread-safe DB writes
+- **Realistic glucose simulation** — diabetic patterns (90–160 mg/dL + spike probability), non-diabetic patterns (80–120 mg/dL, more stable)
+- **Persistent storage** — normalised SQLite schema with relational integrity, FK constraints, and error handling
+- **Data integrity** — SQL injection prevention, IntegrityError handling, connection failure recovery
 
-=> Tech Stack
-Python 3.8+
-SQLite
-Pandas, NumPy
-Threading
-FastAPI, RESTful
-Matplotlib/Plotly
+### 🔨 In Progress
+- **Anomaly detection engine** — consecutive high reading detection (3+ occurrences trigger alert)
+- **Pandas time-series analysis** — 7-day moving averages and trend identification
+- **Alert message generation** — structured alert payloads with severity levels
 
+### 📋 Planned
+- **FastAPI REST layer** — full CRUD + real-time metrics endpoints with OpenAPI docs
+- **Web dashboard** — live monitoring UI with Plotly charts
+- **Predictive analytics** — ML model for glucose trend forecasting
+- **Cloud integration** — Google Cloud Pub/Sub + BigQuery pipeline
 
-=> Installation
-Prerequisites
+---
 
-Python 3.8 or higher
-pip (Python package manager)
+## Tech Stack
 
-Setup
+| Layer | Technology |
+|-------|------------|
+| Language | Python 3.8+ |
+| Database | SQLite (→ PostgreSQL for production) |
+| Data Processing | Pandas, NumPy |
+| Concurrency | Python `threading` |
+| API (Planned) | FastAPI |
+| Visualisation (Planned) | Matplotlib, Plotly |
 
-Clone the repository
+---
 
-bashgit clone https://github.com/yourusername/healthcare-monitoring.git
-cd healthcare-monitoring
+## Database Schema
 
-Create a virtual environment
+```sql
+CREATE TABLE patients (
+    patient_id     TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    age            INTEGER,
+    condition      TEXT,                    -- e.g. "Type 2 Diabetes"
+    threshold_high REAL DEFAULT 180,        -- mg/dL alert ceiling
+    threshold_low  REAL DEFAULT 70          -- mg/dL alert floor
+);
 
-bashpython -m venv venv
+CREATE TABLE readings (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id    TEXT    NOT NULL,
+    glucose_level REAL    NOT NULL,
+    timestamp     TEXT    NOT NULL,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id)
+);
+```
 
-# Activate it:
-# Windows:
-venv\Scripts\activate
+**Design decisions:**
+- Separate `threshold_high` / `threshold_low` per patient — different conditions require different alert ranges
+- `TEXT` timestamps for portability; will migrate to `DATETIME` with indexing for production scale
+- Schema in 3NF — no redundant data, clean FK relationships
 
-Install dependencies
+---
 
-bashpip install -r requirements.txt
+## Glucose Simulation Logic
 
-Initialize database
+| Patient Type | Base Range | Variation | Spike Probability |
+|---|---|---|---|
+| Diabetic (Type 1 / Type 2) | 90–160 mg/dL | ±20 mg/dL | 10% chance of +30–60 mg/dL spike |
+| Non-diabetic / Prediabetic | 80–120 mg/dL | ±20 mg/dL | Rare, lower magnitude |
 
-bashpython -c "from src.database import initialize_database; initialize_database()"
+Clinical reference ranges used:
+- **Normal:** 70–99 mg/dL (fasting)
+- **Prediabetic:** 100–125 mg/dL
+- **Diabetic alert (high):** > 180 mg/dL
+- **Hypoglycaemia alert (low):** < 70 mg/dL
 
-=> Usage
-Quick Start
-1. Add sample patients:
-pythonfrom src.database import add_patient
+---
 
+## Installation
+
+**Prerequisites:** Python 3.8+, pip
+
+```bash
+# 1. Clone
+git clone https://github.com/priyanshiii7/healthcare_monitoring.git
+cd healthcare_monitoring
+
+# 2. Create virtual environment
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Initialise database
+python -c "from src.database import initialize_database; initialize_database()"
+```
+
+---
+
+## Usage
+
+### Quick Start
+
+```python
+from src.database import add_patient
+from src.data_generator import simulate_all_patients
+
+# Register patients
 add_patient("P001", "Alice Johnson", 45, "Type 2 Diabetes")
-add_patient("P002", "Bob Smith", 52, "Type 1 Diabetes")
+add_patient("P002", "Bob Smith",     52, "Type 1 Diabetes")
 add_patient("P003", "Carol Williams", 38, "Prediabetes")
 
-2. Run simulation:
-pythonfrom src.data_generator import simulate_all_patients
+# Start simulation (3 patients, 2 minutes)
+simulate_all_patients(["P001", "P002", "P003"], duration_minutes=2)
+```
 
-# Simulate 3 patients for 2 minutes
-patient_ids = ["P001", "P002", "P003"]
-simulate_all_patients(patient_ids, duration_minutes=2)
-3. Retrieve readings:
-pythonfrom src.database import get_recent_reading
+### Retrieve Readings
+
+```python
+from src.database import get_recent_reading
 
 readings = get_recent_reading("P001", limit=10)
 for r in readings:
     print(f"{r['timestamp']}: {r['glucose_level']} mg/dL")
-Configuration
-Edit config.py to customize:
-python# Database
-DATABASE_PATH = 'data/health_data.db'
+```
 
-# Glucose thresholds (mg/dL)
-GLUCOSE_THRESHOLD_HIGH = 180
-GLUCOSE_THRESHOLD_LOW = 70
+### Configuration (`config.py`)
 
-# Simulation settings
-SIMULATION_INTERVAL = 5  # seconds between readings
-NUM_PATIENTS = 3
+```python
+DATABASE_PATH        = 'data/health_data.db'
+GLUCOSE_THRESHOLD_HIGH = 180   # mg/dL
+GLUCOSE_THRESHOLD_LOW  = 70    # mg/dL
+SIMULATION_INTERVAL    = 5     # seconds between readings
+NUM_PATIENTS           = 3
+```
 
-=> How It Works
-Data Flow Architecture
-┌─────────────────┐
-│  Data Generator │ ──▶ Simulates IoT glucose sensors
-└────────┬────────┘
-         │ (Every 5 seconds)
-         ▼
-┌─────────────────┐
-│   SQLite DB     │ ──▶ Stores patient data & readings
-└────────┬────────┘
-         │ (Queries)
-         ▼
-┌─────────────────┐
-│    Analyzer     │ ──▶ Detects anomalies (In Progress)
-└────────┬────────┘
-         │ (Alerts)
-         ▼
-┌─────────────────┐
-│  Alert System   │ ──▶ Notifications (Planned)
-└─────────────────┘
+---
 
-=> Database Schema
-Patients Table:
-sqlCREATE TABLE patients (
-    patient_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    age INTEGER,
-    condition TEXT,
-    threshold_high REAL DEFAULT 180,
-    threshold_low REAL DEFAULT 70
-);
-Readings Table:
-sqlCREATE TABLE readings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id TEXT NOT NULL,
-    glucose_level REAL NOT NULL,
-    timestamp TEXT NOT NULL,
-    FOREIGN KEY (patient_id) REFERENCES patients(patient_id)
-);
-Glucose Simulation Logic
-For diabetic patients:
+## Project Structure
 
-Base range: 90-160 mg/dL
-Variation: ±20 mg/dL
-Spike probability: 10% chance of +30-60 mg/dL spike
+```
+healthcare_monitoring/
+├── src/
+│   ├── database.py        # DB init, CRUD, connection management
+│   ├── data_generator.py  # IoT simulation, threading
+│   └── analyzer.py        # Anomaly detection (in progress)
+├── data/
+│   └── health_data.db     # SQLite database (auto-created)
+├── tests/
+│   ├── test_generator.py
+│   ├── test_database.py
+│   ├── test_analyzer.py
+│   └── test_full_pipeline.py
+├── config.py
+├── main.py
+├── requirements.txt
+└── README.md
+```
 
-For non-diabetic patients:
+---
 
-Base range: 80-120 mg/dL
-Variation: ±20 mg/dL
-More stable readings
+## Development Progress
 
+| Phase | Status | Details |
+|-------|--------|---------|
+| Phase 1: Foundation | ✅ Complete | DB schema, CRUD, error handling, connection management |
+| Phase 2: Data Generation | 🔨 80% | Single + multi-patient simulation, threading architecture |
+| Phase 3: Analytics | 📋 Planned | Anomaly detection, Pandas time-series, moving averages |
+| Phase 4: API + Dashboard | 📋 Planned | FastAPI endpoints, Plotly visualisation |
+| Phase 5: ML Forecasting | 📋 Planned | Glucose trend prediction model |
 
-=> Current Progress
-Phase 1: Foundation (Complete)
+---
 
- Project structure setup
- Database schema design
- CRUD operations
- Connection management
- Error handling (IntegrityError, connection failures)
+## Roadmap
 
-Phase 2: Data Generation (80% Complete)
+**Next 2–4 weeks**
+- [ ] Complete thread-safe multi-patient simulation
+- [ ] Anomaly detection: flag 3+ consecutive high readings
+- [ ] Unit tests via `pytest` for all modules
 
- Single patient simulation
- Realistic glucose patterns
- Timestamp generation
- Multi-threaded architecture setup
- Complete threading implementation
- Thread safety testing
+**1–2 months**
+- [ ] FastAPI REST layer with Swagger docs
+- [ ] Plotly dashboard (glucose trend charts, alert log)
+- [ ] CSV/JSON data export
 
-Phase 3: Analytics (Planned)
+**3+ months**
+- [ ] ML forecasting model (Linear Regression → LSTM)
+- [ ] Google Cloud Pub/Sub + BigQuery integration
+- [ ] WebSocket real-time updates
+- [ ] Docker containerisation
 
- Anomaly detection algorithm
- Pandas time-series analysis
- 7-day moving averages
- Peak risk window identification
- Trend forecasting
+---
 
-Phase 4: Alerts (Planned)
+## Contributing
 
- Rule-based alert triggers
- Consecutive high reading detection (3+ occurrences)
- Alert message generation
- Notification system
+Contributions and suggestions welcome — this is an active learning project.
 
+```bash
+git checkout -b feature/your-feature
+git commit -m 'feat: describe your change.'
+git push origin feature/your-feature
+# Open a Pull Request
+```
 
-=> Roadmap
-Short-term (Next 2-4 weeks)
+---
 
- Complete multi-threaded data generation
- Build anomaly detection engine
- Implement basic alert system
- Add unit tests (pytest)
+## Inspiration & References
 
-Medium-term (1-2 months)
+- [Google Cloud Healthcare Monitoring Blueprint](https://cloud.google.com/solutions/healthcare-life-sciences)
+- [SQLite Documentation](https://sqlite.org/docs.html)
+- Clinical glucose reference ranges: American Diabetes Association guidelines
 
- FastAPI REST endpoints
- Data visualization dashboard
- Historical trend analysis
- Export data to CSV/JSON
+---
 
-Long-term (3+ months)
-
- Machine learning model for predictions
- Integration with Google Cloud services
- Real-time WebSocket updates
- Mobile app integration
-
-
-=> Learning Journey
-This project is a hands-on learning experience covering:
-Concepts Learned
-Database Design:
-Normalization (3NF)
-Foreign key relationships
-SQL vs NoSQL trade-offs
-Query optimization
-
-Python Best Practices:
-Modular code structure
-Configuration management
-Error handling patterns
-Docstring documentation
-
-Concurrency:
-Threading fundamentals
-Race condition prevention
-Thread-safe database access
-
-Currently Learning:
-Pandas DataFrames
-Time-series analysis
-Statistical anomaly detection
-Performance optimization
-
-Key Insights
-
-"Premature optimization is the root of all evil" - Donald Knuth
-
-Make it work → Make it right → Make it fast
-Database connections are expensive - use connection pooling
-Threading ≠ Parallel processing - Python GIL limitations
-Separation of concerns - each module does ONE thing well
-
-
-Contributing
-This is a learning project, but we welcome suggestions.
-
-Fork the repository
-Create a feature branch (git checkout -b feature/amazing-feature)
-Commit changes (git commit -m 'Add amazing feature')
-Push to branch (git push origin feature/amazing-feature)
-Open a Pull Request
-
-
-Acknowledgments:
-Inspiration: Google Cloud Healthcare Monitoring Blueprint
-Database Tutorial: SQLite official documentation
-Community: Python threading discussions on Stack Overflow
-
-January 11, 2026 - Added multi-threaded data generation architecture
-
-Built with ❤️ as a learning journey into healthcare tech and real-time data processing
+**Built by [Priyanshi Rathore](https://linkedin.com/in/priyanshi-rathore-11b072217) · Final-year CS student · Bikaner, India**
